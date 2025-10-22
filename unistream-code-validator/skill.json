@@ -1,0 +1,19 @@
+{
+  "name": "unistream-code-validator",
+  "version": "1.0.0",
+  "description": "Validates Unistream codebase for hardcoded values, unsafe fallbacks, coordinate bugs, and configuration violations. Runs executable checks across the entire codebase.",
+  "author": "Unistream Team",
+  "triggers": [
+    "validate code",
+    "check hardcoded",
+    "check fallbacks",
+    "coordinate validation",
+    "check pixel size",
+    "code quality check"
+  ],
+  "files": {
+    "instructions": "instructions.md",
+    "validator": "validate_code.py",
+    "rules": "validation_rules.yaml"
+  }
+}

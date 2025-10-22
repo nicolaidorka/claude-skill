@@ -1,0 +1,19 @@
+{
+  "name": "unistream-architecture-analyzer",
+  "version": "1.0.0",
+  "description": "Analyzes Unistream codebase architecture, maps command flows through layers, and suggests proper abstractions. Builds a dependency graph and identifies architectural violations.",
+  "author": "Unistream Team",
+  "triggers": [
+    "analyze architecture",
+    "map command flow",
+    "show dependencies",
+    "suggest abstraction",
+    "analyze structure",
+    "where does this flow"
+  ],
+  "files": {
+    "instructions": "instructions.md",
+    "analyzer": "analyze_architecture.py",
+    "architecture_rules": "architecture_patterns.yaml"
+  }
+}

@@ -1,0 +1,152 @@
+# Unistream Code Validation Rules
+# These patterns define what the validator checks for
+
+# Hardcoded pixel sizes - CRITICAL ERRORS
+hardcoded_pixel_sizes:
+  severity: ERROR
+  patterns:
+    - regex: 'pixel_size_um\s*=\s*0\.\d+'
+      message: "Hardcoded pixel_size_um value"
+      suggestion: "Calculate from camera_sensor_pixel_size_um / objective_magnification"
+    - regex: 'pixel_size_mm\s*=\s*0\.\d+'
+      message: "Hardcoded pixel_size_mm value"
+      suggestion: "Calculate from pixel_size_um / 1000"
+
+  # Exceptions (these are OK)
+  allowed_contexts:
+    - pattern: 'tests/'
+      reason: "Test files can use hardcoded values"
+    - pattern: '# Test data'
+      reason: "Documented test values"
+    - pattern: 'pixel_size_um=getattr'
+      reason: "Safe fallback with getattr"
+
+# Unsafe fallback values
+unsafe_fallbacks:
+  severity: WARNING
+  patterns:
+    - regex: '\.get\([^)]+,\s*0\.\d+\)'
+      message: "Silent numeric fallback in config.get()"
+      suggestion: "Use explicit validation instead of default value"
+    - regex: '\s+or\s+0\.\d+'
+      message: "Silent 'or' fallback to numeric value"
+      suggestion: "Raise error if value is None/missing"
+    - regex: 'getattr\([^)]+,\s*0\.\d+\)'
+      message: "Silent numeric fallback in getattr()"
+      suggestion: "Use explicit None check and raise error"
+
+  allowed_contexts:
+    - pattern: 'if .* is None:'
+      reason: "Explicit None check follows fallback"
+
+# Coordinate transformation issues
+coordinate_bugs:
+  severity: ERROR
+  files:
+    - 'src/display/overlays/coordinate_utils.py'
+    - 'src/tools/coordinate_processing/*.py'
+
+  patterns:
+    - regex: 'live_view_y\s*=\s*center_y\s*\+\s*pixel_y'
+      message: "Known Y-axis inversion bug (see COORDINATE_BUG_FINDINGS.md)"
+      suggestion: "Check if subtraction is needed: center_y - pixel_y"
+      file: 'coordinate_utils.py'
+      line_context: "stage_to_live_view"
+
+    - regex: 'stage_to_live_view\('
+      message: "Check that update_stage_position() was called before this"
+      suggestion: "Ensure stage position is current, not stale"
+      severity: WARNING
+
+# Configuration access
+hardcoded_config:
+  severity: ERROR
+  patterns:
+    - regex: 'laser_power\s*=\s*\d+'
+      message: "Hardcoded laser power"
+      suggestion: "Read from laser_config.yaml"
+    - regex: 'port\s*=\s*[''"]\/dev\/tty'
+      message: "Hardcoded serial port"
+      suggestion: "Read from hardware_config.yaml"
+    - regex: 'objective_magnification\s*=\s*\d+'
+      message: "Hardcoded objective magnification"
+      suggestion: "Read from Squid+ configuration.ini"
+
+  allowed_contexts:
+    - pattern: 'tests/'
+      reason: "Test files can hardcode for mocking"
+    - pattern: '# Default for testing'
+      reason: "Documented test default"
+
+# Missing error handling
+missing_validation:
+  severity: WARNING
+  patterns:
+    - regex: 'self\.stage_[xy]_mm'
+      message: "Check if stage position could be None/stale"
+      suggestion: "Add validation or update_stage_position() call"
+      context_lines: 3
+
+# Import patterns
+import_issues:
+  severity: WARNING
+  patterns:
+    - regex: 'from .* import \*'
+      message: "Wildcard import reduces code clarity"
+      suggestion: "Import specific names"
+    - regex: 'import cv2'
+      message: "Check if opencv-python-headless should be used instead"
+      severity: INFO
+
+# Code quality patterns
+code_quality:
+  severity: INFO
+  patterns:
+    - regex: 'print\('
+      message: "Use logger instead of print()"
+      suggestion: "Replace with self.logger.info() or similar"
+      exclude_files:
+        - 'tests/'
+        - '__main__.py'
+
+    - regex: 'TODO|FIXME|HACK|XXX'
+      message: "Code comment indicates incomplete work"
+      severity: WARNING
+
+# File-specific rules
+file_specific:
+  'coordinate_utils.py':
+    required_methods:
+      - 'update_stage_position'
+      - 'stage_to_live_view'
+
+    required_validations:
+      - 'self.stage_x_mm is not None'
+      - 'self.stage_y_mm is not None'
+
+  'annotation_manager.py':
+    before_export:
+      - 'Must call precision_coordinate_transformer.transform()'
+      - 'Must log transformation for verification'
+
+# Exclude patterns (never check these)
+global_excludes:
+  directories:
+    - '__pycache__'
+    - '.git'
+    - 'venv'
+    - 'cache'
+    - '.coordinate_transforms'
+
+  file_patterns:
+    - '*.pyc'
+    - '*.pyo'
+    - '*.log'
+    - '*_test.py'  # Different from tests/ directory
+
+# Output formatting
+output:
+  group_by: file  # Group findings by file
+  show_context_lines: 2  # Lines of context around issue
+  max_findings_per_rule: 50  # Prevent overwhelming output
+  color: true  # Use color in terminal output

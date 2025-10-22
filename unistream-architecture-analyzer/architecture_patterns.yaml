@@ -1,0 +1,266 @@
+# Unistream Architecture Patterns and Rules
+
+# Define the expected layer structure
+layers:
+  cli:
+    name: "Command Line Interface"
+    directories:
+      - "unistream_0.4.py"
+    responsibilities:
+      - "Parse user commands"
+      - "Initialize hardware context"
+      - "Launch workflows"
+    allowed_imports:
+      - "src/workflows/**"
+      - "src/core/**"
+      - "src/config/**"
+    forbidden_imports:
+      - "src/hardware/**"  # CLI should not directly import hardware
+      - "control.**"  # Should not access device APIs directly
+
+  workflows:
+    name: "Workflow Orchestration"
+    directories:
+      - "src/workflows/**"
+    responsibilities:
+      - "Orchestrate multi-step operations"
+      - "Coordinate multiple hardware devices"
+      - "Manage workflow state"
+      - "Handle user interactions during workflow"
+    allowed_imports:
+      - "src/hardware/**"
+      - "src/core/**"
+      - "src/tools/**"
+      - "src/config/**"
+    forbidden_imports:
+      - "src/gui/**"  # Workflows should be GUI-agnostic (except workflow-specific UI)
+
+  controllers:
+    name: "Hardware Controllers"
+    directories:
+      - "src/hardware/**"
+    responsibilities:
+      - "Abstract hardware APIs"
+      - "Provide high-level device operations"
+      - "Handle device state"
+      - "Thread-safe hardware access"
+    allowed_imports:
+      - "control.**"
+      - "src/config/**"
+    forbidden_imports:
+      - "src/workflows/**"  # Controllers should not know about workflows
+      - "src/gui/**"
+
+  core:
+    name: "Core Services"
+    directories:
+      - "src/core/**"
+    responsibilities:
+      - "Data management"
+      - "Annotation handling"
+      - "Session management"
+    allowed_imports:
+      - "src/tools/**"
+      - "src/config/**"
+
+  tools:
+    name: "Tools and Utilities"
+    directories:
+      - "src/tools/**"
+    responsibilities:
+      - "Image processing"
+      - "Coordinate transformations"
+      - "Analysis algorithms"
+    allowed_imports:
+      - "src/config/**"
+    forbidden_imports:
+      - "src/hardware/**"
+      - "src/workflows/**"
+      - "src/gui/**"
+
+  gui:
+    name: "Graphical Interface"
+    directories:
+      - "src/gui/**"
+    responsibilities:
+      - "User interface"
+      - "Display rendering"
+      - "User input handling"
+    allowed_imports:
+      - "src/workflows/**"
+      - "src/core/**"
+    forbidden_imports:
+      - "src/hardware/**"  # GUI should not directly control hardware
+
+# Architecture rules to enforce
+rules:
+  no_layer_skipping:
+    severity: ERROR
+    description: "Layers must not skip levels in the hierarchy"
+    check: |
+      If layer_a.level < layer_b.level - 1 and layer_a imports layer_b:
+        Report violation
+
+  no_circular_dependencies:
+    severity: ERROR
+    description: "No circular import dependencies"
+    check: |
+      Build import graph, detect cycles
+
+  no_hardcoded_config:
+    severity: ERROR
+    description: "All configuration must come from config files"
+    patterns:
+      - 'pixel_size_um\s*=\s*0\.\d+'
+      - 'laser_power\s*=\s*\d+'
+      - 'port\s*=\s*[''"]\/dev'
+
+  single_responsibility:
+    severity: WARNING
+    description: "Files should have a single clear responsibility"
+    thresholds:
+      max_lines: 1000
+      max_methods: 30
+      max_responsibilities: 3
+
+  centralized_transformations:
+    severity: ERROR
+    description: "Coordinate transformations must go through precision_coordinate_transformer"
+    forbidden_patterns:
+      - '(pixels|coords?|position)\s*\*\s*pixel_size'  # Direct pixel math
+      - 'stage_[xy]\s*[-+]\s*\d+'  # Manual stage offset
+    allowed_files:
+      - "src/tools/coordinate_processing/precision_coordinate_transformer.py"
+      - "tests/**"
+
+# Patterns indicating need for abstraction
+abstraction_indicators:
+  duplicate_logic:
+    threshold: 3  # If same logic appears in 3+ files
+    patterns:
+      - name: "Pixel size calculation"
+        regex: 'pixel_size_um\s*=\s*.*?/\s*magnification'
+        suggestion: "Extract to shared utility: calculate_pixel_size(sensor_size, magnification)"
+
+      - name: "Stage coordinate transform"
+        regex: 'stage_[xy]_mm\s*=\s*pixels?\s*\*\s*pixel_size'
+        suggestion: "Use precision_coordinate_transformer instead"
+
+      - name: "Config loading pattern"
+        regex: 'with\s+open.*yaml.*load'
+        suggestion: "Use ConfigManager singleton"
+
+  god_class:
+    description: "Class/file doing too many things"
+    thresholds:
+      lines: 1000
+      methods: 30
+      imports: 20
+    indicators:
+      - "Multiple unrelated method groups"
+      - "Handles I/O, logic, and presentation"
+      - "Long list of imports from different domains"
+
+  missing_interface:
+    description: "Multiple classes with similar structure that should share interface"
+    indicators:
+      - name: "Pump controllers"
+        pattern: "src/hardware/*pump*.py"
+        common_methods: ["start", "stop", "set_flow_rate"]
+        suggestion: "Create FluidicsDevice ABC"
+
+      - name: "Coordinate transformers"
+        pattern: "src/tools/**/*coord*.py"
+        common_methods: ["pixel_to_stage", "stage_to_pixel"]
+        suggestion: "Create CoordinateTransform protocol"
+
+  anemic_model:
+    description: "Data classes that should have behavior"
+    indicators:
+      - "Only getters/setters, no logic"
+      - "Logic about this data is elsewhere"
+      - "Many files manipulating the same data structure"
+
+# File size and complexity thresholds
+complexity_thresholds:
+  lines:
+    warning: 500
+    error: 1000
+  methods:
+    warning: 20
+    error: 30
+  cyclomatic_complexity:
+    warning: 10
+    error: 20
+  dependencies:
+    warning: 15
+    error: 25
+
+# Known architectural patterns in Unistream
+known_patterns:
+  singleton:
+    description: "Hardware context is shared singleton"
+    files:
+      - "src/core/hardware_context.py"
+    usage: "Prevents multiple hardware instances"
+
+  adapter:
+    description: "Hardware adapters wrap device APIs"
+    files:
+      - "src/hardware/squid_adapter.py"
+      - "src/hardware/opentrons_adapter.py"
+    usage: "Consistent interface over diverse hardware"
+
+  facade:
+    description: "Workflows provide high-level operations"
+    files:
+      - "src/workflows/*.py"
+    usage: "Simplify complex multi-device operations"
+
+  strategy:
+    description: "Different stitching algorithms"
+    files:
+      - "src/tools/imaging_processing_utils/run_stitching.py"
+    usage: "Swap stitching implementations"
+
+# Command flow examples (for tracing)
+known_flows:
+  scan_tissue:
+    entry: "main_window.py:start_scan_clicked()"
+    steps:
+      - "scanning_workflow.py:execute()"
+      - "scanning_workflow.py:setup_scan_parameters()"
+      - "squid_adapter.py:move_stage(x, y)"
+      - "control.microcontroller.move_to(x, y)"
+      - "squid_adapter.py:snap_image()"
+      - "data_manager.py:save_tile()"
+
+  laser_cut:
+    entry: "isolation_workflow_optflex.py:run()"
+    steps:
+      - "laser_alignment_workflow.py:align_laser()"
+      - "coordinate_mapper.py:transform_polygons()"
+      - "yoctopuce_adapter.py:trace_polygon()"
+      - "tecan_pump_adapter.py:start_flow()"
+      - "opentrons_adapter.py:collect_well()"
+
+  export_annotations:
+    entry: "annotation_viewer_V2.py:export_annotations()"
+    steps:
+      - "annotation_manager.py:get_all_polygons()"
+      - "precision_coordinate_transformer.py:transform_vertices()"
+      - "annotation_manager.py:write_json()"
+
+# Dependency visualization config
+visualization:
+  max_depth: 4  # How deep to show import tree
+  group_by: layer  # Group nodes by architectural layer
+  show_external: false  # Don't show stdlib/third-party
+  highlight_violations: true  # Color-code rule violations
+
+# Output formatting
+output:
+  format: "markdown"  # markdown, json, or mermaid
+  include_line_numbers: true
+  show_suggestions: true
+  group_by_severity: true
